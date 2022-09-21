@@ -469,6 +469,10 @@ main(int argc, char *argv[])
 				arrayaddptr(&stages[PREPROCESS].cmd, "-I");
 				arrayaddptr(&stages[PREPROCESS].cmd, nextarg(&argv));
 				break;
+			case 'm':
+				arrayaddptr(&stages[CODEGEN].cmd, "-m");
+				arrayaddptr(&stages[CODEGEN].cmd, nextarg(&argv));
+				break;
 			case 'L':
 				arrayaddptr(&stages[LINK].cmd, "-L");
 				arrayaddptr(&stages[LINK].cmd, nextarg(&argv));

@@ -18,6 +18,7 @@ static const struct target alltargs[] = {
 			},
 		},
 		.signedchar = 1,
+		.regsize = 8,
 	},
 	{
 		.name = "aarch64",
@@ -27,6 +28,7 @@ static const struct target alltargs[] = {
 			.u.structunion.tag = "va_list",
 		},
 		.typewchar = &typeuint,
+		.regsize = 8,
 	},
 	{
 		.name = "riscv64",
@@ -36,7 +38,18 @@ static const struct target alltargs[] = {
 			.base = &typevoid,
 		},
 		.typewchar = &typeint,
+		.regsize = 8,
 	},
+	{
+		.name = "riscv32",
+		.typevalist = &(struct type){
+			.kind = TYPEPOINTER, .prop = PROPSCALAR,
+			.align = 4, .size = 4,
+			.base = &typevoid,
+		},
+		.typewchar = &typeint,
+		.regsize = 4,
+	}, 
 };
 
 void
@@ -56,4 +69,12 @@ targinit(const char *name)
 		fatal("unknown target '%s'", name);
 	typechar.u.basic.issigned = targ->signedchar;
 	typeadjvalist = typeadjust(targ->typevalist);
+	ptrsize = targ->regsize;
+	if(ptrsize == 4) {
+	    typelong = typelong4;
+	    typeulong = typeulong4;    
+	} else {
+	    typelong = typelong8;
+	    typeulong = typeulong8;  
+	}
 }

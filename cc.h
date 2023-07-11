@@ -425,10 +425,11 @@ extern struct type typebool;
 extern struct type typechar, typeschar, typeuchar;
 extern struct type typeshort, typeushort;
 extern struct type typeint, typeuint;
-extern struct type typelong, typeulong;
+extern struct type typelong, typelong4, typelong8, typeulong, typeulong4, typeulong8;
 extern struct type typellong, typeullong;
 extern struct type typefloat, typedouble, typeldouble;
 extern struct type *typeadjvalist;
+extern unsigned int ptrsize;
 
 /* targ */
 
@@ -437,6 +438,7 @@ struct target {
 	struct type *typevalist;
 	struct type *typewchar;
 	int signedchar;
+	unsigned int regsize;
 };
 
 extern const struct target *targ;

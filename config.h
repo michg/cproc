@@ -1,4 +1,4 @@
-static const char target[]               = "riscv64-linux-musl";
+static const char target[]               = "riscv32";
 static const char *const startfiles[]    = {"-l", ":crt1.o", "-l", ":crti.o"};
 static const char *const endfiles[]      = {"-l", "c", "-l", ":crtn.o"};
 static const char *const preprocesscmd[] = {

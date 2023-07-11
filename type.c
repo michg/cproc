@@ -29,10 +29,14 @@ struct type typeushort  = INTTYPE(TYPESHORT, 2, false, 0);
 struct type typeint     = INTTYPE(TYPEINT, 4, true, 0);
 struct type typeuint    = INTTYPE(TYPEINT, 4, false, 0);
 
-struct type typelong    = INTTYPE(TYPELONG, 8, true, 0);
-struct type typeulong   = INTTYPE(TYPELONG, 8, false, 0);
+struct type typelong4    = INTTYPE(TYPELONG, 4, true, 0);
+struct type typeulong4   = INTTYPE(TYPELONG, 4, false, 0);
+struct type typelong8    = INTTYPE(TYPELONG, 8, true, 0);
+struct type typeulong8   = INTTYPE(TYPELONG, 8, false, 0);
+struct type typelong;
+struct type typeulong;
 
-struct type typellong   = INTTYPE(TYPELLONG, 8, true, 0);
+struct type typellong   = INTTYPE(TYPELLONG, 8, true, 0); 
 struct type typeullong  = INTTYPE(TYPELLONG, 8, false, 0);
 
 struct type typefloat   = FLTTYPE(TYPEFLOAT, 4);
@@ -40,6 +44,7 @@ struct type typedouble  = FLTTYPE(TYPEDOUBLE, 8);
 struct type typeldouble = FLTTYPE(TYPELDOUBLE, 16);
 
 struct type *typeadjvalist;
+unsigned int ptrsize;
 
 struct type *
 mktype(enum typekind kind, enum typeprop prop)
@@ -64,8 +69,8 @@ mkpointertype(struct type *base, enum typequal qual)
 	t = mktype(TYPEPOINTER, PROPSCALAR);
 	t->base = base;
 	t->qual = qual;
-	t->size = 8;
-	t->align = 8;
+	t->size = ptrsize;
+	t->align = ptrsize;
 
 	return t;
 }

@@ -370,7 +370,7 @@ main(int argc, char *argv[])
 {
 	enum stage last = LINK;
 	enum filetype filetype = 0;
-	char *arg, *end, *output = NULL, *arch, *qbearch;
+	char *arg, *end, *output = NULL,  *qbearch, *arch = NULL;
 	struct array inputs = {0}, *cmd;
 	struct input *input;
 	size_t i;
@@ -389,18 +389,13 @@ main(int argc, char *argv[])
 	} else if (hasprefix(target, "aarch64-")) {
 		arch = "aarch64";
 		qbearch = "arm64";
-	} else if (hasprefix(target, "riscv64-")) {
-		arch = "riscv64";
-		qbearch = "rv64";
-	} else if (hasprefix(target, "riscv32")) {
-	    arch = "riscv32";
+	} else if (hasprefix(target, "riscv64")) {
+		arch = "rv64";
 		qbearch = "rv64";
 	} else {
 		fatal("unsupported target '%s'", target);
 		return 1;  /* unreachable */
 	}
-	arrayaddptr(&stages[COMPILE].cmd, "-t");
-	arrayaddptr(&stages[COMPILE].cmd, arch);
 	arrayaddptr(&stages[CODEGEN].cmd, "-t");
 	arrayaddptr(&stages[CODEGEN].cmd, qbearch);
 
@@ -474,7 +469,8 @@ main(int argc, char *argv[])
 				break;
 			case 'm':
 				arrayaddptr(&stages[CODEGEN].cmd, "-m");
-				arrayaddptr(&stages[CODEGEN].cmd, nextarg(&argv));
+				arch = nextarg(&argv);
+				arrayaddptr(&stages[CODEGEN].cmd, arch);
 				break;
 			case 'L':
 				arrayaddptr(&stages[LINK].cmd, "-L");
@@ -566,6 +562,10 @@ main(int argc, char *argv[])
 			}
 		}
 	}
+
+	arrayaddptr(&stages[COMPILE].cmd, "-t");
+	arrayaddptr(&stages[COMPILE].cmd, arch);
+
 
 	for (i = 0; i < LEN(stages); ++i)
 		stages[i].cmdbase = stages[i].cmd.len;

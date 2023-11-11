@@ -31,7 +31,7 @@ static const struct target alltargs[] = {
 		.regsize = 8,
 	},
 	{
-		.name = "riscv64",
+		.name = "rv64",
 		.typevalist = &(struct type){
 			.kind = TYPEPOINTER, .prop = PROPSCALAR,
 			.align = 8, .size = 8,
@@ -41,7 +41,7 @@ static const struct target alltargs[] = {
 		.regsize = 8,
 	},
 	{
-		.name = "riscv32",
+		.name = "rv32",
 		.typevalist = &(struct type){
 			.kind = TYPEPOINTER, .prop = PROPSCALAR,
 			.align = 4, .size = 4,

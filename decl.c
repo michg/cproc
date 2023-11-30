@@ -69,6 +69,8 @@ mkdecl(enum declkind k, struct type *t, enum typequal tq, enum linkage linkage)
 	d->linkage = linkage;
 	d->type = t;
 	d->qual = tq;
+	if (k == DECLOBJECT)
+		d->u.obj.align = t->align;
 
 	return d;
 }
@@ -83,7 +85,7 @@ storageclass(enum storageclass *sc)
 	case TTYPEDEF:       new = SCTYPEDEF;     break;
 	case TEXTERN:        new = SCEXTERN;      break;
 	case TSTATIC:        new = SCSTATIC;      break;
-	case T_THREAD_LOCAL: new = SCTHREADLOCAL; break;
+	case TTHREAD_LOCAL:  new = SCTHREADLOCAL; break;
 	case TAUTO:          new = SCAUTO;        break;
 	case TREGISTER:      new = SCREGISTER;    break;
 	default: return 0;
@@ -214,7 +216,7 @@ tagspec(struct scope *s)
 			name = tok.lit;
 			next();
 			if (consume(TASSIGN)) {
-				e = constexpr(s);
+				e = evalexpr(s);
 				if (e->kind != EXPRCONST || !(e->type->prop & PROPINT))
 					error(&tok.loc, "expected integer constant expression");
 				i = e->u.constant.u;
@@ -323,7 +325,7 @@ declspecs(struct scope *s, enum storageclass *sc, enum funcspec *fs, int *align)
 			ts |= SPECUNSIGNED;
 			next();
 			break;
-		case T_BOOL:
+		case TBOOL:
 			t = &typebool;
 			++ntypes;
 			next();
@@ -351,9 +353,9 @@ declspecs(struct scope *s, enum storageclass *sc, enum funcspec *fs, int *align)
 			++ntypes;
 			next();
 			break;
-		case T__TYPEOF__:
+		case TTYPEOF:
 			next();
-			expect(TLPAREN, "after '__typeof__'");
+			expect(TLPAREN, "after 'typeof'");
 			t = typename(s, &tq);
 			if (!t) {
 				e = expr(s);
@@ -368,18 +370,18 @@ declspecs(struct scope *s, enum storageclass *sc, enum funcspec *fs, int *align)
 			break;
 
 		/* 6.7.5 Alignment specifier */
-		case T_ALIGNAS:
+		case TALIGNAS:
 			if (!align)
 				error(&tok.loc, "alignment specifier not allowed in this declaration");
 			next();
-			expect(TLPAREN, "after '_Alignas'");
+			expect(TLPAREN, "after 'alignas'");
 			other = typename(s, NULL);
 			i = other ? other->align : intconstexpr(s, false);
 			if (i & (i - 1))
 				error(&tok.loc, "invalid alignment: %d", i);
 			if (i > *align)
 				*align = i;
-			expect(TRPAREN, "to close '_Alignas' specifier");
+			expect(TRPAREN, "to close 'alignas' specifier");
 			break;
 
 		default:
@@ -749,9 +751,9 @@ staticassert(struct scope *s)
 	struct stringlit msg;
 	unsigned long long c;
 
-	if (!consume(T_STATIC_ASSERT))
+	if (!consume(TSTATIC_ASSERT))
 		return false;
-	expect(TLPAREN, "after _Static_assert");
+	expect(TLPAREN, "after static_assert");
 	c = intconstexpr(s, true);
 	if (consume(TCOMMA)) {
 		tokencheck(&tok, TSTRINGLIT, "after static assertion expression");
@@ -833,7 +835,6 @@ declcommon(struct scope *s, enum declkind kind, char *name, char *asmname, struc
 	struct decl *d;
 	enum linkage linkage;
 	const char *kindstr = kind == DECLFUNC ? "function" : "object";
-	char *priorname;
 
 	if (prior) {
 		if (prior->linkage == LINKNONE)
@@ -843,7 +844,7 @@ declcommon(struct scope *s, enum declkind kind, char *name, char *asmname, struc
 			error(&tok.loc, "%s '%s' redeclared with different linkage", kindstr, name);
 		if (!typecompatible(t, prior->type) || tq != prior->qual)
 			error(&tok.loc, "%s '%s' redeclared with incompatible type", kindstr, name);
-		if (asmname && strcmp(globalname(prior->value), asmname) != 0)
+		if (asmname && (!prior->asmname || strcmp(prior->asmname, asmname) != 0))
 			error(&tok.loc, "%s '%s' redeclared with different assembler name", kindstr, name);
 		prior->type = typecomposite(t, prior->type);
 		return prior;
@@ -862,18 +863,21 @@ declcommon(struct scope *s, enum declkind kind, char *name, char *asmname, struc
 				error(&tok.loc, "%s '%s' redeclared with different linkage", kindstr, name);
 			if (!typecompatible(t, prior->type) || tq != prior->qual)
 				error(&tok.loc, "%s '%s' redeclared with incompatible type", kindstr, name);
-			priorname = globalname(prior->value);
 			if (!asmname)
-				asmname = priorname;
-			else if (strcmp(priorname, asmname) != 0)
+				asmname = prior->asmname;
+			else if (!prior->asmname || strcmp(prior->asmname, asmname) != 0)
 				error(&tok.loc, "%s '%s' redeclared with different assembler name", kindstr, name);
 			t = typecomposite(t, prior->type);
 		}
 	}
 	d = mkdecl(kind, t, tq, linkage);
 	scopeputdecl(s, name, d);
-	if (kind == DECLFUNC || linkage != LINKNONE || sc & SCSTATIC)
-		d->value = mkglobal(asmname ? asmname : name, linkage == LINKNONE && !asmname);
+	if (kind == DECLFUNC || linkage != LINKNONE || sc & SCSTATIC) {
+		if (asmname)
+			name = asmname;
+		d->value = mkglobal(name, linkage == LINKNONE && !asmname);
+		d->asmname = asmname;
+	}
 	return d;
 }
 
@@ -900,7 +904,7 @@ decl(struct scope *s, struct func *f)
 		return false;
 	if (f) {
 		if (sc == SCTHREADLOCAL)
-			error(&tok.loc, "block scope declaration containing '_Thread_local' must contain 'static' or 'extern'");
+			error(&tok.loc, "block scope declaration containing 'thread_local' must contain 'static' or 'extern'");
 	} else {
 		/* 6.9p2 */
 		if (sc & SCAUTO)
@@ -942,11 +946,11 @@ decl(struct scope *s, struct func *f)
 				error(&tok.loc, "typedef '%s' redefined with different type", name);
 			break;
 		case DECLOBJECT:
-			d = declcommon(s, kind, name, asmname, t, tq, sc, prior);
 			if (align && align < t->align)
-				error(&tok.loc, "specified alignment of object '%s' is less strict than is required by type", name);
-			if (d->align < align)
-				d->align = align;
+				error(&tok.loc, "object '%s' requires alignment %d, which is stricter than specified alignment %d", name, t->align, align);
+			d = declcommon(s, kind, name, asmname, t, tq, sc, prior);
+			if (d->u.obj.align < align)
+				d->u.obj.align = align;
 			init = NULL;
 			if (consume(TASSIGN)) {
 				if (f && d->linkage != LINKNONE)
@@ -955,8 +959,8 @@ decl(struct scope *s, struct func *f)
 					error(&tok.loc, "object '%s' redefined", name);
 				init = parseinit(s, d->type);
 			} else if (d->linkage != LINKNONE) {
-				if (!(sc & SCEXTERN) && !d->defined && !d->tentative.next)
-					listinsert(tentativedefns.prev, &d->tentative);
+				if (!(sc & SCEXTERN) && !d->defined && !d->u.obj.tentative.next)
+					listinsert(tentativedefns.prev, &d->u.obj.tentative);
 				break;
 			}
 			if (d->linkage != LINKNONE || sc & SCSTATIC)
@@ -964,8 +968,8 @@ decl(struct scope *s, struct func *f)
 			else
 				funcinit(f, d, init);
 			d->defined = true;
-			if (d->tentative.next)
-				listremove(&d->tentative);
+			if (d->u.obj.tentative.next)
+				listremove(&d->u.obj.tentative);
 			break;
 		case DECLFUNC:
 			if (align)
@@ -987,7 +991,7 @@ decl(struct scope *s, struct func *f)
 				}
 			}
 			d = declcommon(s, kind, name, asmname, t, tq, sc, prior);
-			d->inlinedefn = d->linkage == LINKEXTERN && fs & FUNCINLINE && !(sc & SCEXTERN) && (!prior || prior->inlinedefn);
+			d->u.func.inlinedefn = d->linkage == LINKEXTERN && fs & FUNCINLINE && !(sc & SCEXTERN) && (!prior || prior->u.func.inlinedefn);
 			if (tok.kind == TLBRACE) {
 				if (!allowfunc)
 					error(&tok.loc, "function definition not allowed");
@@ -997,7 +1001,7 @@ decl(struct scope *s, struct func *f)
 				f = mkfunc(d, name, t, s);
 				stmt(f, s);
 				/* XXX: need to keep track of function in case a later declaration specifies extern */
-				if (!d->inlinedefn)
+				if (!d->u.func.inlinedefn)
 					emitfunc(f, d->linkage == LINKEXTERN);
 				s = delscope(s);
 				delfunc(f);
@@ -1042,5 +1046,5 @@ emittentativedefns(void)
 	struct list *l;
 
 	for (l = tentativedefns.next; l != &tentativedefns; l = l->next)
-		emitdata(listelement(l, struct decl, tentative), NULL);
+		emitdata(listelement(l, struct decl, u.obj.tentative), NULL);
 }

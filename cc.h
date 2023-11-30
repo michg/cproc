@@ -15,11 +15,15 @@ enum tokenkind {
 	TSTRINGLIT,
 
 	/* keyword */
+	TALIGNAS,
+	TALIGNOF,
 	TAUTO,
+	TBOOL,
 	TBREAK,
 	TCASE,
 	TCHAR,
 	TCONST,
+	TCONSTEXPR,
 	TCONTINUE,
 	TDEFAULT,
 	TDO,
@@ -27,6 +31,7 @@ enum tokenkind {
 	TELSE,
 	TENUM,
 	TEXTERN,
+	TFALSE,
 	TFLOAT,
 	TFOR,
 	TGOTO,
@@ -34,6 +39,7 @@ enum tokenkind {
 	TINLINE,
 	TINT,
 	TLONG,
+	TNULLPTR,
 	TREGISTER,
 	TRESTRICT,
 	TRETURN,
@@ -41,27 +47,30 @@ enum tokenkind {
 	TSIGNED,
 	TSIZEOF,
 	TSTATIC,
+	TSTATIC_ASSERT,
 	TSTRUCT,
 	TSWITCH,
+	TTHREAD_LOCAL,
+	TTRUE,
 	TTYPEDEF,
+	TTYPEOF,
+	TTYPEOF_UNQUAL,
 	TUNION,
 	TUNSIGNED,
 	TVOID,
 	TVOLATILE,
 	TWHILE,
-	T_ALIGNAS,
-	T_ALIGNOF,
 	T_ATOMIC,
-	T_BOOL,
+	T_BITINT,
 	T_COMPLEX,
+	T_DECIMAL128,
+	T_DECIMAL32,
+	T_DECIMAL64,
 	T_GENERIC,
 	T_IMAGINARY,
 	T_NORETURN,
-	T_STATIC_ASSERT,
-	T_THREAD_LOCAL,
 	T__ASM__,
 	T__ATTRIBUTE__,
-	T__TYPEOF__,
 
 	/* punctuator */
 	TLBRACK,
@@ -259,17 +268,22 @@ struct decl {
 	struct type *type;
 	enum typequal qual;
 	struct value *value;
+	char *asmname;
 	_Bool defined;
 
-	/* link in list of tentative object definitions */
-	struct list tentative;
-	/* alignment of object storage (may be stricter than type requires) */
-	int align;
-
-	/* the function might have an "inline definition" (C11 6.7.4p7) */
-	_Bool inlinedefn;
-
-	enum builtinkind builtin;
+	union {
+		struct {
+			/* link in list of tentative object definitions */
+			struct list tentative;
+			/* alignment of object storage (may be stricter than type requires) */
+			int align;
+		} obj;
+		struct {
+			/* the function might have an "inline definition" (C11 6.7.4p7) */
+			_Bool inlinedefn;
+		} func;
+		enum builtinkind builtin;
+	} u;
 };
 
 struct scope {
@@ -475,7 +489,7 @@ struct type *stringconcat(struct stringlit *, _Bool);
 
 struct expr *expr(struct scope *);
 struct expr *assignexpr(struct scope *);
-struct expr *constexpr(struct scope *);
+struct expr *evalexpr(struct scope *);
 unsigned long long intconstexpr(struct scope *, _Bool);
 void delexpr(struct expr *);
 
@@ -516,7 +530,6 @@ void switchcase(struct switchcases *, unsigned long long, struct block *);
 struct block *mkblock(char *);
 
 struct value *mkglobal(char *, _Bool);
-char *globalname(struct value *);
 
 struct value *mkintconst(unsigned long long);
 unsigned long long intconstvalue(struct value *);

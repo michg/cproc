@@ -9,12 +9,12 @@ packages:
 - nixpkgs.gnumake
 tasks:
 - build: |
-    PATH=$HOME/qbe/obj:$PATH
-    make -C qbe
+    PATH=$HOME/qbe:$PATH
+    make -C qbe CC=cc
     cd cproc
     ./configure --with-ldso=
     make all check bootstrap
 triggers:
 - action: email
   condition: failure
-  to: "<~mcf/cproc@lists.sr.ht>"
+  to: "<~mcf/cproc-builds@lists.sr.ht>"

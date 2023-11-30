@@ -9,7 +9,7 @@ sources:
 - https://git.sr.ht/~mcf/qbe
 tasks:
 - build: |
-    PATH=$HOME/qbe/obj:$PATH
+    PATH=$HOME/qbe:$PATH
     cd qbe
     cat >config.h <<EOF
     #define Defasm Gaself
@@ -28,4 +28,4 @@ tasks:
 triggers:
 - action: email
   condition: failure
-  to: "<~mcf/cproc@lists.sr.ht>"
+  to: "<~mcf/cproc-builds@lists.sr.ht>"

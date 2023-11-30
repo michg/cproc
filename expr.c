@@ -184,7 +184,7 @@ exprassign(struct expr *e, struct type *t)
 	switch (t->kind) {
 	case TYPEBOOL:
 		if (!(et->prop & PROPARITH) && et->kind != TYPEPOINTER)
-			error(&tok.loc, "assignment to _Bool must be from arithmetic or pointer type");
+			error(&tok.loc, "assignment to bool must be from arithmetic or pointer type");
 		break;
 	case TYPEPOINTER:
 		if (nullpointer(e))
@@ -688,6 +688,12 @@ primaryexpr(struct scope *s)
 		}
 		next();
 		break;
+	case TTRUE:
+	case TFALSE:
+		e = mkexpr(EXPRCONST, &typebool, NULL);
+		e->u.constant.u = tok.kind == TTRUE;
+		next();
+		break;
 	case TLPAREN:
 		next();
 		e = expr(s);
@@ -906,7 +912,7 @@ postfixexpr(struct scope *s, struct expr *r)
 		case TLPAREN:  /* function call */
 			next();
 			if (r->kind == EXPRIDENT && r->u.ident.decl->kind == DECLBUILTIN) {
-				e = builtinfunc(s, r->u.ident.decl->builtin);
+				e = builtinfunc(s, r->u.ident.decl->u.builtin);
 				expect(TRPAREN, "after builtin parameters");
 				break;
 			}
@@ -958,7 +964,7 @@ postfixexpr(struct scope *s, struct expr *r)
 			if (!m)
 				error(&tok.loc, "struct/union has no member named '%s'", tok.lit);
 			r = mkbinaryexpr(&tok.loc, TADD, exprconvert(r, &typeulong), mkconstexpr(&typeulong, offset));
-			r = exprconvert(r, mkpointertype(m->type, tq | m->qual));
+			r->type = mkpointertype(m->type, tq | m->qual);
 			r = mkunaryexpr(TMUL, r);
 			r->lvalue = lvalue;
 			if (m->bits.before || m->bits.after) {
@@ -1037,7 +1043,7 @@ unaryexpr(struct scope *s)
 		e = mkbinaryexpr(&tok.loc, TEQL, e, mkconstexpr(&typeint, 0));
 		break;
 	case TSIZEOF:
-	case T_ALIGNOF:
+	case TALIGNOF:
 		next();
 		if (consume(TLPAREN)) {
 			t = typename(s, NULL);
@@ -1056,7 +1062,7 @@ unaryexpr(struct scope *s)
 			t = NULL;
 			e = unaryexpr(s);
 		} else {
-			error(&tok.loc, "expected ')' after '_Alignof'");
+			error(&tok.loc, "expected ')' after 'alignof'");
 			return NULL;  /* unreachable */
 		}
 		if (!t) {
@@ -1226,7 +1232,7 @@ condexpr(struct scope *s)
 }
 
 struct expr *
-constexpr(struct scope *s)
+evalexpr(struct scope *s)
 {
 	return eval(condexpr(s), EVALARITH);
 }
@@ -1236,7 +1242,7 @@ intconstexpr(struct scope *s, bool allowneg)
 {
 	struct expr *e;
 
-	e = constexpr(s);
+	e = evalexpr(s);
 	if (e->kind != EXPRCONST || !(e->type->prop & PROPINT))
 		error(&tok.loc, "not an integer constant expression");
 	if (!allowneg && e->type->u.basic.issigned && e->u.constant.u >> 63)

@@ -72,9 +72,11 @@ targinit(const char *name)
 	ptrsize = targ->regsize;
 	if(ptrsize == 4) {
 	    typelong = typelong4;
-	    typeulong = typeulong4;    
+	    typeulong = typeulong4;
+	    ptrclass = 'w';
 	} else {
 	    typelong = typelong8;
-	    typeulong = typeulong8;  
+	    typeulong = typeulong8;
+	    ptrclass = 'l';
 	}
 }

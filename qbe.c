@@ -93,7 +93,9 @@ struct func {
 	unsigned lastid;
 };
 
-static const int ptrclass = 'l';
+int ptrclass;
+
+static const int allocclass = 'l';
 
 void
 switchcase(struct switchcases *cases, unsigned long long i, struct block *b)
@@ -270,7 +272,7 @@ funcalloc(struct func *f, struct decl *d)
 	default: size += align - 16; /* fallthrough */
 	case 16: op = IALLOC16; break;
 	}
-	inst = mkinst(f, op, ptrclass, mkintconst(size), NULL);
+	inst = mkinst(f, op, allocclass, mkintconst(size), NULL);
 	arrayaddptr(&f->start->insts, inst);
 	if (align > 16) {
 		/* TODO: implement alloc32 in QBE and use that instead */
@@ -891,7 +893,7 @@ funcexpr(struct func *f, struct expr *e)
 			return funcinst(f, IVAARG, qbetype(e->type).base, l, NULL);
 		case BUILTINALLOCA:
 			l = funcexpr(f, e->base);
-			return funcinst(f, IALLOC16, ptrclass, l, NULL);
+			return funcinst(f, IALLOC16, allocclass, l, NULL);
 		case BUILTINUNREACHABLE:
 			return NULL;
 		default:

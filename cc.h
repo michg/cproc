@@ -132,9 +132,9 @@ struct location {
 struct token {
 	enum tokenkind kind;
 	/* whether or not the token is ineligible for expansion */
-	_Bool hide;
+	bool hide;
 	/* whether or not the token was preceeded by a space */
-	_Bool space;
+	bool space;
 	struct location loc;
 	char *lit;
 };
@@ -166,7 +166,8 @@ enum typekind {
 	TYPEARRAY,
 	TYPEFUNC,
 	TYPESTRUCT,
-	TYPEUNION
+	TYPEUNION,
+	TYPENULLPTR,
 };
 
 enum typeprop {
@@ -177,15 +178,8 @@ enum typeprop {
 	PROPREAL    = 1<<2,
 	PROPARITH   = 1<<3,
 	PROPSCALAR  = 1<<4,
-	PROPFLOAT   = 1<<5
-};
-
-struct param {
-	char *name;
-	struct type *type;
-	enum typequal qual;
-	struct value *value;
-	struct param *next;
+	PROPFLOAT   = 1<<5,
+	PROPVM      = 1<<6  /* variably-modified type */
 };
 
 struct bitfield {
@@ -212,17 +206,19 @@ struct type {
 	struct list link;  /* used only during construction of type */
 	/* qualifiers of the base type */
 	enum typequal qual;
-	_Bool incomplete, flexible;
+	bool incomplete, flexible;
 	union {
 		struct {
-			_Bool issigned, iscomplex;
+			bool issigned, iscomplex;
 		} basic;
 		struct {
-			unsigned long long length;
+			struct expr *length;
+			enum typequal ptrqual;
+			struct value *size;
 		} array;
 		struct {
-			_Bool isprototype, isvararg, isnoreturn, paraminfo;
-			struct param *params;
+			bool isvararg;
+			struct decl *params;
 			size_t nparam;
 		} func;
 		struct {
@@ -246,6 +242,12 @@ enum linkage {
 	LINKEXTERN,
 };
 
+enum storageduration {
+	SDSTATIC,
+	SDTHREAD,
+	SDAUTO,
+};
+
 enum builtinkind {
 	BUILTINALLOCA,
 	BUILTINCONSTANTP,
@@ -263,32 +265,36 @@ enum builtinkind {
 };
 
 struct decl {
+	char *name;
 	enum declkind kind;
 	enum linkage linkage;
 	struct type *type;
 	enum typequal qual;
 	struct value *value;
 	char *asmname;
-	_Bool defined;
+	bool defined;
+	bool tentative;
+	struct decl *next;
 
 	union {
 		struct {
-			/* link in list of tentative object definitions */
-			struct list tentative;
 			/* alignment of object storage (may be stricter than type requires) */
 			int align;
+			enum storageduration storage;
 		} obj;
 		struct {
 			/* the function might have an "inline definition" (C11 6.7.4p7) */
-			_Bool inlinedefn;
+			bool inlinedefn;
+			bool isnoreturn;
 		} func;
+		unsigned long long enumconst;
 		enum builtinkind builtin;
 	} u;
 };
 
 struct scope {
-	struct map *tags;
-	struct map *decls;
+	struct map tags;
+	struct map decls;
 	struct block *breaklabel;
 	struct block *continuelabel;
 	struct switchcases *switchcases;
@@ -318,6 +324,7 @@ enum exprkind {
 
 	EXPRBUILTIN,
 	EXPRTEMP,
+	EXPRSIZEOF,
 };
 
 struct stringlit {
@@ -328,9 +335,9 @@ struct stringlit {
 struct expr {
 	enum exprkind kind;
 	/* whether this expression is an lvalue */
-	_Bool lvalue;
+	bool lvalue;
 	/* whether this expression is a pointer decayed from an array or function designator */
-	_Bool decayed;
+	bool decayed;
 	/* the unqualified type of the expression */
 	struct type *type;
 	/* the type qualifiers of the object this expression refers to (ignored for non-lvalues) */
@@ -338,6 +345,7 @@ struct expr {
 	enum tokenkind op;
 	struct expr *base;
 	struct expr *next;
+	struct expr *toeval;
 	union {
 		struct {
 			struct decl *decl;
@@ -356,10 +364,11 @@ struct expr {
 			struct bitfield bits;
 		} bitfield;
 		struct {
+			struct decl *decl;
 			struct init *init;
 		} compound;
 		struct {
-			_Bool post;
+			bool post;
 		} incdec;
 		struct {
 			struct expr *l, *r;
@@ -373,6 +382,9 @@ struct expr {
 		struct {
 			enum builtinkind kind;
 		} builtin;
+		struct {
+			struct type *type;
+		} szof;
 		struct value *temp;
 	} u;
 };
@@ -412,9 +424,9 @@ extern enum ppflags ppflags;
 void ppinit(void);
 
 void next(void);
-_Bool peek(int);
+bool peek(int);
 char *expect(enum tokenkind, const char *);
-_Bool consume(int);
+bool consume(int);
 
 /* type */
 
@@ -422,17 +434,16 @@ struct type *mktype(enum typekind, enum typeprop);
 struct type *mkpointertype(struct type *, enum typequal);
 struct type *mkarraytype(struct type *, enum typequal, unsigned long long);
 
-_Bool typecompatible(struct type *, struct type *);
-_Bool typesame(struct type *, struct type *);
+bool typecompatible(struct type *, struct type *);
+bool typesame(struct type *, struct type *);
 struct type *typecomposite(struct type *, struct type *);
 struct type *typeunqual(struct type *, enum typequal *);
 struct type *typecommonreal(struct type *, unsigned, struct type *, unsigned);
 struct type *typepromote(struct type *, unsigned);
-struct type *typeadjust(struct type *);
+struct type *typeadjust(struct type *, enum typequal *);
 enum typeprop typeprop(struct type *);
 struct member *typemember(struct type *, const char *, unsigned long long *);
-
-struct param *mkparam(char *, struct type *, enum typequal);
+bool typehasint(struct type *, unsigned long long, bool);
 
 extern struct type typevoid;
 extern struct type typebool;
@@ -442,6 +453,7 @@ extern struct type typeint, typeuint;
 extern struct type typelong, typelong4, typelong8, typeulong, typeulong4, typeulong8;
 extern struct type typellong, typeullong;
 extern struct type typefloat, typedouble, typeldouble;
+extern struct type typenullptr;
 extern struct type *typeadjvalist;
 extern unsigned int ptrsize;
 extern int ptrclass;
@@ -460,11 +472,28 @@ extern const struct target *targ;
 
 void targinit(const char *);
 
+/* attr */
+
+enum attrkind {
+	ATTRALIGNED     = 1<<0,
+	ATTRCONSTRUCTOR = 1<<1,
+	ATTRDESTRUCTOR  = 1<<2,
+	ATTRPACKED      = 1<<3,
+};
+
+struct attr {
+	enum attrkind kind;
+	int align;
+};
+
+bool attr(struct attr *, enum attrkind);
+bool gnuattr(struct attr *, enum attrkind);
+
 /* decl */
 
-struct decl *mkdecl(enum declkind, struct type *, enum typequal, enum linkage);
-_Bool decl(struct scope *, struct func *);
-struct type *typename(struct scope *, enum typequal *);
+struct decl *mkdecl(char *name, enum declkind, struct type *, enum typequal, enum linkage);
+bool decl(struct scope *, struct func *);
+struct type *typename(struct scope *, enum typequal *, struct expr **);
 
 struct decl *stringdecl(struct expr *);
 
@@ -476,22 +505,22 @@ void scopeinit(void);
 struct scope *mkscope(struct scope *);
 struct scope *delscope(struct scope *);
 
-void scopeputdecl(struct scope *, const char *, struct decl *);
-struct decl *scopegetdecl(struct scope *, const char *, _Bool);
+void scopeputdecl(struct scope *, struct decl *);
+struct decl *scopegetdecl(struct scope *, const char *, bool);
 
 void scopeputtag(struct scope *, const char *, struct type *);
-struct type *scopegettag(struct scope *, const char *, _Bool);
+struct type *scopegettag(struct scope *, const char *, bool);
 
 extern struct scope filescope;
 
 /* expr */
 
-struct type *stringconcat(struct stringlit *, _Bool);
+struct type *stringconcat(struct stringlit *, bool);
 
 struct expr *expr(struct scope *);
 struct expr *assignexpr(struct scope *);
-struct expr *evalexpr(struct scope *);
-unsigned long long intconstexpr(struct scope *, _Bool);
+struct expr *condexpr(struct scope *);
+unsigned long long intconstexpr(struct scope *, bool);
 void delexpr(struct expr *);
 
 struct expr *exprassign(struct expr *, struct type *);
@@ -499,17 +528,14 @@ struct expr *exprpromote(struct expr *);
 
 /* eval */
 
-enum evalkind {
-	EVALARITH,  /* arithmetic constant expression */
-	EVALINIT,   /* initializer constant expression */
-};
-
-struct expr *eval(struct expr *, enum evalkind);
+struct expr *eval(struct expr *);
 
 /* init */
 
 struct init *mkinit(unsigned long long, unsigned long long, struct bitfield, struct expr *);
 struct init *parseinit(struct scope *, struct type *);
+
+/* stmt */
 
 void stmt(struct func *, struct scope *);
 
@@ -517,7 +543,7 @@ void stmt(struct func *, struct scope *);
 
 struct gotolabel {
 	struct block *label;
-	_Bool defined;
+	bool defined;
 };
 
 struct switchcases {
@@ -530,10 +556,9 @@ void switchcase(struct switchcases *, unsigned long long, struct block *);
 
 struct block *mkblock(char *);
 
-struct value *mkglobal(char *, _Bool);
+struct value *mkglobal(struct decl *);
 
 struct value *mkintconst(unsigned long long);
-unsigned long long intconstvalue(struct value *);
 
 struct func *mkfunc(struct decl *, char *, struct type *, struct scope *);
 void delfunc(struct func *);
@@ -543,9 +568,10 @@ struct value *funcexpr(struct func *, struct expr *);
 void funcjmp(struct func *, struct block *);
 void funcjnz(struct func *, struct value *, struct type *, struct block *, struct block *);
 void funcret(struct func *, struct value *);
+void funchlt(struct func *);
 struct gotolabel *funcgoto(struct func *, char *);
 void funcswitch(struct func *, struct value *, struct switchcases *, struct block *);
-void funcinit(struct func *, struct decl *, struct init *);
+void funcinit(struct func *, struct decl *, struct init *, bool);
 
-void emitfunc(struct func *, _Bool);
+void emitfunc(struct func *, bool);
 void emitdata(struct decl *,  struct init *);

@@ -1,6 +1,5 @@
 #include <assert.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include "util.h"
@@ -11,7 +10,7 @@ struct object {
 	struct type *type;
 	union {
 		struct member *mem;
-		size_t idx;
+		unsigned long long idx;
 	} u;
 	bool iscur;
 };
@@ -64,17 +63,6 @@ initadd(struct initparser *p, struct init *new)
 }
 
 static void
-updatearray(struct type *t, unsigned long long i)
-{
-	if (!t->incomplete)
-		return;
-	if (++i > t->u.array.length) {
-		t->u.array.length = i;
-		t->size = i * t->base->size;
-	}
-}
-
-static void
 subobj(struct initparser *p, struct type *t, unsigned long long off)
 {
 	off += p->sub->offset;
@@ -122,13 +110,14 @@ designator(struct scope *s, struct initparser *p)
 			if (t->kind != TYPEARRAY)
 				error(&tok.loc, "index designator is only valid for array types");
 			next();
-			p->sub->u.idx = intconstexpr(s, false);
-			if (t->incomplete)
-				updatearray(t, p->sub->u.idx);
-			else if (p->sub->u.idx >= t->u.array.length)
-				error(&tok.loc, "index designator is larger than array length");
+			p->sub->u.idx = intconstexpr(s, false) * t->base->size;
+			if (p->sub->u.idx >= t->size) {
+				if (!t->incomplete)
+					error(&tok.loc, "index designator is larger than array length");
+				t->size = p->sub->u.idx + t->base->size;
+			}
 			expect(TRBRACK, "for index designator");
-			subobj(p, t->base, p->sub->u.idx * t->base->size);
+			subobj(p, t->base, p->sub->u.idx);
 			break;
 		case TPERIOD:
 			if (t->kind != TYPESTRUCT && t->kind != TYPEUNION)
@@ -153,10 +142,10 @@ focus(struct initparser *p)
 
 	switch (p->sub->type->kind) {
 	case TYPEARRAY:
+		t = p->sub->type->base;
 		p->sub->u.idx = 0;
 		if (p->sub->type->incomplete)
-			updatearray(p->sub->type, 0);
-		t = p->sub->type->base;
+			p->sub->type->size = t->size;
 		break;
 	case TYPESTRUCT:
 	case TYPEUNION:
@@ -180,14 +169,14 @@ advance(struct initparser *p)
 		t = p->sub->type;
 		switch (t->kind) {
 		case TYPEARRAY:
-			++p->sub->u.idx;
-			if (t->incomplete)
-				updatearray(t, p->sub->u.idx);
-			if (p->sub->u.idx < t->u.array.length) {
-				subobj(p, t->base, t->base->size * p->sub->u.idx);
-				return;
+			p->sub->u.idx += t->base->size;
+			if (p->sub->u.idx == t->size) {
+				if (!t->incomplete)
+					break;
+				t->size += t->base->size;
 			}
-			break;
+			subobj(p, t->base, p->sub->u.idx);
+			return;
 		case TYPESTRUCT:
 			p->sub->u.mem = p->sub->u.mem->next;
 			if (p->sub->u.mem) {
@@ -219,6 +208,8 @@ parseinit(struct scope *s, struct type *t)
 	p.last = &p.init;
 	if (t->incomplete && t->kind != TYPEARRAY)
 		error(&tok.loc, "initializer specified for incomplete type");
+	if (t->kind == TYPEARRAY && t->base->size == 0)
+		error(&tok.loc, "initializer specified for variable length array type");
 	for (;;) {
 		if (p.cur) {
 			if (tok.kind == TLBRACK || tok.kind == TPERIOD)
@@ -256,7 +247,7 @@ parseinit(struct scope *s, struct type *t)
 				if (!(base->prop & PROPCHAR && expr->type->base->prop & PROPCHAR) && !typecompatible(base, expr->type->base))
 					error(&tok.loc, "cannot initialize array with string literal of different width");
 				if (t->incomplete)
-					updatearray(t, expr->u.string.size - 1);
+					t->size = expr->type->size;
 				goto add;
 			case TYPESTRUCT:
 			case TYPEUNION:

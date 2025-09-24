@@ -1,26 +1,20 @@
 #include <assert.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include "util.h"
 
-struct map {
-	size_t len, cap;
-	struct mapkey *keys;
-	void **vals;
-};
-
-static uint64_t
+static unsigned long
 hash(const void *ptr, size_t len)
 {
-	extern int siphash(const uint8_t *, const size_t, const uint8_t *, uint8_t *, const size_t);
-	static const uint8_t k[16] = {0};  /* XXX: we don't have a way to get entropy in standard C */
-	uint64_t r;
+	unsigned long h;
+	const unsigned char *pos, *end;
 
-	siphash(ptr, len, k, (uint8_t *)&r, sizeof(r));
-
-	return r;
+	/* FNV-1a */
+	h = 0x811c9dc5;
+	for (pos = ptr, end = pos + len; pos != end; ++pos)
+		h = (h ^ *pos) * 0x1000193;
+	return h;
 }
 
 void
@@ -31,31 +25,25 @@ mapkey(struct mapkey *k, const void *s, size_t n)
 	k->hash = hash(s, n);
 }
 
-struct map *
-mkmap(size_t cap)
+void
+mapinit(struct map *h, size_t cap)
 {
-	struct map *h;
 	size_t i;
 
 	assert(!(cap & cap - 1));
-	h = xmalloc(sizeof(*h));
 	h->len = 0;
 	h->cap = cap;
 	h->keys = xreallocarray(NULL, cap, sizeof(h->keys[0]));
 	h->vals = xreallocarray(NULL, cap, sizeof(h->vals[0]));
 	for (i = 0; i < cap; ++i)
 		h->keys[i].str = NULL;
-
-	return h;
 }
 
 void
-delmap(struct map *h, void del(void *))
+mapfree(struct map *h, void del(void *))
 {
 	size_t i;
 
-	if (!h)
-		return;
 	if (del) {
 		for (i = 0; i < h->cap; ++i) {
 			if (h->keys[i].str)
@@ -64,7 +52,6 @@ delmap(struct map *h, void del(void *))
 	}
 	free(h->keys);
 	free(h->vals);
-	free(h);
 }
 
 static bool

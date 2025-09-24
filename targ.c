@@ -1,4 +1,4 @@
-#include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include "util.h"
 #include "cc.h"
@@ -12,7 +12,7 @@ static const struct target alltargs[] = {
 		.typevalist = &(struct type){
 			.kind = TYPEARRAY,
 			.align = 8, .size = 24,
-			.u.array = {1}, .base = &(struct type){
+			.base = &(struct type){
 				.kind = TYPESTRUCT,
 				.align = 8, .size = 24,
 			},
@@ -49,13 +49,14 @@ static const struct target alltargs[] = {
 		},
 		.typewchar = &typeint,
 		.regsize = 4,
-	}, 
+	},
 };
 
 void
 targinit(const char *name)
 {
 	size_t i;
+	enum typequal qual;
 
 	if (!name) {
 		/* TODO: provide a way to set this default */
@@ -68,8 +69,8 @@ targinit(const char *name)
 	if (!targ)
 		fatal("unknown target '%s'", name);
 	typechar.u.basic.issigned = targ->signedchar;
-	typeadjvalist = typeadjust(targ->typevalist);
-	ptrsize = targ->regsize;
+	qual = QUALNONE;
+    ptrsize = targ->regsize;
 	if(ptrsize == 4) {
 	    typelong = typelong4;
 	    typeulong = typeulong4;
@@ -79,4 +80,5 @@ targinit(const char *name)
 	    typeulong = typeulong8;
 	    ptrclass = 'l';
 	}
+	typeadjvalist = typeadjust(targ->typevalist, &qual);
 }

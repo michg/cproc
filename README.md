@@ -1,6 +1,6 @@
 (mirrored on [GitHub][GitHub mirror])
 
-[![builds.sr.ht status](https://builds.sr.ht/~mcf/cproc.svg)](https://builds.sr.ht/~mcf/cproc)
+[![builds.sr.ht status](https://builds.sr.ht/~mcf/cproc/commits/master.svg)](https://builds.sr.ht/~mcf/cproc/commits/master)
 
 `cproc` is a [C11] compiler using [QBE] as a backend. It is released
 under the [ISC] license.
@@ -28,8 +28,8 @@ external one is currently required as well.
 
 ## Supported targets
 
-All architectures supported by QBE should work (currently x86\_64 and
-aarch64).
+All architectures supported by QBE should work (currently x86\_64,
+aarch64, and riscv64).
 
 The following targets are tested by the continuous build and known to
 bootstrap and pass all tests:
@@ -39,6 +39,7 @@ bootstrap and pass all tests:
 - `x86_64-freebsd`
 - `aarch64-linux-musl`
 - `aarch64-linux-gnu`
+- `riscv64-linux-gnu`
 
 ## Building
 
@@ -60,13 +61,6 @@ string arrays (`static char *[]`):
 You may also want to customize your environment or `config.mk` with the
 appropriate `CC`, `CFLAGS` and `LDFLAGS`.
 
-If you don't have QBE installed, you can build it from the included
-submodule, then add it to your PATH so that the driver will be able to
-run it.
-
-	make qbe
-	PATH=$PWD/qbe:$PATH
-
 Once this is done, you can build with
 
 	make
@@ -84,11 +78,9 @@ specified in `config.h`.
 
 ## What's missing
 
-- Digraph and trigraph sequences ([6.4.6p3] and [5.2.1.1], will not
-  be implemented).
+- Digraph sequences ([6.4.6p3], will not be implemented).
 - Variable-length arrays ([#1]).
 - `volatile`-qualified types ([#7]).
-- `_Thread_local` storage-class specifier ([#5]).
 - `long double` type ([#3]).
 - Inline assembly ([#5]).
 - Preprocessor ([#6]).
@@ -103,7 +95,7 @@ use it for general discussion, questions, patches, or bug reports
 
 ## Issue tracker
 
-Please report any issues to https://todo.sr.ht/~mcf/cproc.
+Please report any issues to [~mcf/cproc@todo.sr.ht].
 
 ## Contributing
 
@@ -130,4 +122,5 @@ Patches are greatly appreciated. Send them to the mailing list
 [#35]: https://todo.sr.ht/~mcf/cproc/35
 [#44]: https://todo.sr.ht/~mcf/cproc/44
 [~mcf/cproc@lists.sr.ht]: https://lists.sr.ht/~mcf/cproc
+[~mcf/cproc@todo.sr.ht]: https://todo.sr.ht/~mcf/cproc
 [GitHub mirror]: https://github.com/michaelforney/cproc

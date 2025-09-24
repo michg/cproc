@@ -7,17 +7,11 @@ struct array {
 	size_t len, cap;
 };
 
-struct mapkey {
-	uint64_t hash;
-	const void *str;
-	size_t len;
-};
-
 struct treenode {
 	unsigned long long key;
 	void *child[2];
 	int height;
-	_Bool new;  /* set by treeinsert if this node was newly allocated */
+	bool new;  /* set by treeinsert if this node was newly allocated */
 };
 
 extern char *argv0;
@@ -47,9 +41,21 @@ void *arraylast(struct array *, size_t);
 
 /* map */
 
+struct map {
+	size_t len, cap;
+	struct mapkey *keys;
+	void **vals;
+};
+
+struct mapkey {
+	unsigned long hash;
+	const void *str;
+	size_t len;
+};
+
 void mapkey(struct mapkey *, const void *, size_t);
-struct map *mkmap(size_t);
-void delmap(struct map *, void(void *));
+void mapinit(struct map *, size_t);
+void mapfree(struct map *, void(void *));
 void **mapput(struct map *, struct mapkey *);
 void *mapget(struct map *, struct mapkey *);
 

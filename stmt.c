@@ -1,6 +1,5 @@
 #include <assert.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,6 +15,7 @@ label(struct func *f, struct scope *s)
 	struct block *b;
 	unsigned long long i;
 
+	attr(NULL, 0);
 	switch (tok.kind) {
 	case TCASE:
 		next();
@@ -70,6 +70,7 @@ stmt(struct func *f, struct scope *s)
 	struct block *b[4];
 	struct switchcases swtch;
 
+	attr(NULL, 0);
 	switch (tok.kind) {
 	/* 6.8.2 Compound statement */
 	case TLBRACE:

@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
 #include <string.h>
 #include "util.h"
 #include "cc.h"
@@ -36,15 +35,16 @@ struct type typeulong8   = INTTYPE(TYPELONG, 8, false, 0);
 struct type typelong;
 struct type typeulong;
 
-struct type typellong   = INTTYPE(TYPELLONG, 8, true, 0); 
+struct type typellong   = INTTYPE(TYPELLONG, 8, true, 0);
 struct type typeullong  = INTTYPE(TYPELLONG, 8, false, 0);
 
 struct type typefloat   = FLTTYPE(TYPEFLOAT, 4);
 struct type typedouble  = FLTTYPE(TYPEDOUBLE, 8);
 struct type typeldouble = FLTTYPE(TYPELDOUBLE, 16);
 
-struct type *typeadjvalist;
+struct type typenullptr = {.kind = TYPENULLPTR, .size = 8, .align = 8, .prop = PROPSCALAR};
 unsigned int ptrsize;
+struct type *typeadjvalist;
 
 struct type *
 mktype(enum typekind kind, enum typeprop prop)
@@ -71,6 +71,8 @@ mkpointertype(struct type *base, enum typequal qual)
 	t->qual = qual;
 	t->size = ptrsize;
 	t->align = ptrsize;
+	if (base)
+		t->prop |= base->prop & PROPVM;
 
 	return t;
 }
@@ -83,7 +85,8 @@ mkarraytype(struct type *base, enum typequal qual, unsigned long long len)
 	t = mktype(TYPEARRAY, 0);
 	t->base = base;
 	t->qual = qual;
-	t->u.array.length = len;
+	t->u.array.length = NULL;
+	t->u.array.ptrqual = QUALNONE;
 	t->incomplete = !len;
 	if (t->base) {
 		t->align = t->base->align;
@@ -96,12 +99,13 @@ mkarraytype(struct type *base, enum typequal qual, unsigned long long len)
 static int
 typerank(struct type *t)
 {
+	if (t->kind == TYPEENUM)
+		t = t->base;
 	assert(t->prop & PROPINT);
 	switch (t->kind) {
 	case TYPEBOOL:  return 1;
 	case TYPECHAR:  return 2;
 	case TYPESHORT: return 3;
-	case TYPEENUM:
 	case TYPEINT:   return 4;
 	case TYPELONG:  return 5;
 	case TYPELLONG: return 6;
@@ -113,43 +117,36 @@ typerank(struct type *t)
 bool
 typecompatible(struct type *t1, struct type *t2)
 {
-	struct type *tmp;
-	struct param *p1, *p2;
+	struct decl *p1, *p2;
+	struct expr *e1, *e2;
 
 	if (t1 == t2)
 		return true;
 	if (t1->kind != t2->kind) {
-		/* enum types are compatible with 'int', but not with
-		   each other (unless they are the same type) */
-		return (t1->kind == TYPEENUM && t2->kind == TYPEINT ||
-		        t1->kind == TYPEINT && t2->kind == TYPEENUM) &&
-		       t1->u.basic.issigned == t2->u.basic.issigned;
+		/*
+		enum types are compatible with their underlying
+		type, but not with each other (unless they are the
+		same type)
+		*/
+		return t1->kind == TYPEENUM && t2 == t1->base ||
+		       t2->kind == TYPEENUM && t1 == t2->base;
 	}
 	switch (t1->kind) {
 	case TYPEPOINTER:
 		goto derived;
 	case TYPEARRAY:
-		if (t1->u.array.length && t2->u.array.length && t1->u.array.length != t2->u.array.length)
+		if (t1->incomplete || t2->incomplete)
+			goto derived;
+		e1 = t1->u.array.length;
+		e2 = t2->u.array.length;
+		if (e1 && e2 && e1->kind == EXPRCONST && e2->kind == EXPRCONST && e1->u.constant.u != e2->u.constant.u)
 			return false;
 		goto derived;
 	case TYPEFUNC:
-		if (!t1->u.func.isprototype) {
-			if (!t2->u.func.isprototype)
-				return true;
-			tmp = t1, t1 = t2, t2 = tmp;
-		}
 		if (t1->u.func.isvararg != t2->u.func.isvararg)
 			return false;
-		if (!t2->u.func.paraminfo) {
-			for (p1 = t1->u.func.params; p1; p1 = p1->next) {
-				if (!typecompatible(p1->type, typepromote(p1->type, -1)))
-					return false;
-			}
-			return true;
-		}
 		for (p1 = t1->u.func.params, p2 = t2->u.func.params; p1 && p2; p1 = p1->next, p2 = p2->next) {
-			tmp = t2->u.func.isprototype ? p2->type : typepromote(p2->type, -1);
-			if (!typecompatible(p1->type, tmp))
+			if (!typecompatible(p1->type, p2->type))
 				return false;
 		}
 		if (p1 || p2)
@@ -226,13 +223,18 @@ typecommonreal(struct type *t1, unsigned w1, struct type *t2, unsigned w2)
 
 /* function parameter type adjustment (C11 6.7.6.3p7) */
 struct type *
-typeadjust(struct type *t)
+typeadjust(struct type *t, enum typequal *tq)
 {
+	enum typequal ptrqual;
+
 	switch (t->kind) {
 	case TYPEARRAY:
-		t = mkpointertype(t->base, t->qual);
+		ptrqual = t->u.array.ptrqual;
+		t = mkpointertype(t->base, *tq | t->qual);
+		*tq = ptrqual;
 		break;
 	case TYPEFUNC:
+		assert(*tq == QUALNONE);
 		t = mkpointertype(t, QUALNONE);
 		break;
 	}
@@ -263,16 +265,11 @@ typemember(struct type *t, const char *name, unsigned long long *offset)
 	return NULL;
 }
 
-struct param *
-mkparam(char *name, struct type *t, enum typequal tq)
+bool
+typehasint(struct type *t, unsigned long long i, bool sign)
 {
-	struct param *p;
-
-	p = xmalloc(sizeof(*p));
-	p->name = name;
-	p->type = t;
-	p->qual = tq;
-	p->next = NULL;
-
-	return p;
+	assert(t->prop & PROPINT);
+	if (sign && i >= -1ull << 63)
+		return t->u.basic.issigned && i >= -1ull << (t->size << 3) - 1;
+	return i <= 0xffffffffffffffffull >> (8 - t->size << 3) + t->u.basic.issigned;
 }

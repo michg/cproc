@@ -1,12 +1,14 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
 #include "util.h"
 #include "cc.h"
 
-#define F (1<<8)
-#define S (2<<8)
+enum {
+	F = 1<<8,
+	S = 2<<8
+};
+
 static void
 cast(struct expr *expr)
 {
@@ -97,11 +99,9 @@ binary(struct expr *expr, enum tokenkind op, struct expr *l, struct expr *r)
 	}
 	cast(expr);
 }
-#undef F
-#undef S
 
 struct expr *
-eval(struct expr *expr, enum evalkind kind)
+eval(struct expr *expr)
 {
 	struct expr *l, *r, *c;
 	struct decl *d;
@@ -110,32 +110,31 @@ eval(struct expr *expr, enum evalkind kind)
 	t = expr->type;
 	switch (expr->kind) {
 	case EXPRIDENT:
-		if (expr->u.ident.decl->kind != DECLCONST)
+		d = expr->u.ident.decl;
+		if (d->kind != DECLCONST)
 			break;
 		expr->kind = EXPRCONST;
-		expr->u.constant.u = intconstvalue(expr->u.ident.decl->value);
+		expr->u.constant.u = d->u.enumconst;
 		break;
 	case EXPRCOMPOUND:
-		if (kind != EVALINIT)
+		d = expr->u.compound.decl;
+		if (d->u.obj.storage != SDSTATIC)
 			break;
-		d = mkdecl(DECLOBJECT, t, expr->qual, LINKNONE);
-		d->value = mkglobal(NULL, true);
+		d->value = mkglobal(d);
 		emitdata(d, expr->u.compound.init);
 		expr->kind = EXPRIDENT;
 		expr->u.ident.decl = d;
 		break;
 	case EXPRUNARY:
-		l = eval(expr->base, kind);
+		l = eval(expr->base);
 		switch (expr->op) {
 		case TBAND:
 			switch (l->kind) {
 			case EXPRUNARY:
 				if (l->op == TMUL)
-					expr = eval(l->base, kind);
+					expr = eval(l->base);
 				break;
 			case EXPRSTRING:
-				if (kind != EVALINIT)
-					break;
 				l->u.ident.decl = stringdecl(l);
 				l->kind = EXPRIDENT;
 				expr->base = l;
@@ -152,7 +151,7 @@ eval(struct expr *expr, enum evalkind kind)
 		}
 		break;
 	case EXPRCAST:
-		l = eval(expr->base, kind);
+		l = eval(expr->base);
 		if (l->kind == EXPRCONST) {
 			expr->kind = EXPRCONST;
 			if (l->type->prop & PROPINT && t->prop & PROPFLOAT) {
@@ -186,8 +185,8 @@ eval(struct expr *expr, enum evalkind kind)
 		}
 		break;
 	case EXPRBINARY:
-		l = eval(expr->u.binary.l, kind);
-		r = eval(expr->u.binary.r, kind);
+		l = eval(expr->u.binary.l);
+		r = eval(expr->u.binary.r);
 		expr->u.binary.l = l;
 		expr->u.binary.r = r;
 		switch (expr->op) {

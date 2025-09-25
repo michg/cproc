@@ -1,4 +1,4 @@
-static const char target[]               = "riscv64";
+static const char target[]               = "riscv64-";
 static const char *const startfiles[]    = {"-l", ":crt1.o", "-l", ":crti.o"};
 static const char *const endfiles[]      = {"-l", "c", "-l", ":crtn.o"};
 static const char *const preprocesscmd[] = {
@@ -12,6 +12,7 @@ static const char *const preprocesscmd[] = {
 	"-D", "__STDC_NO_ATOMICS__",
 	"-D", "__STDC_NO_COMPLEX__",
 	"-D", "__STDC_NO_VLA__",
+	"-D", "__STDC_VERSION__",
 	"-U", "__SIZEOF_INT128__",
 
 	/* we don't generate position-independent code */
